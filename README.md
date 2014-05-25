@@ -52,7 +52,7 @@ There are two basic parts in Zoe: agents and commands.
 
 An agent is a process responsible of a single feature. To communicate, agents use messages, that are simple key-value pairs. 
 [This document](https://github.com/guluc3m/gul-zoe/blob/master/doc/messages.html) describes the message format and the set of messages
-already defined. Please note that that document contains messages for agents that are not available in this repository, like the banking
+already defined. Please note that this document contains messages for agents that are not available in this repository, like the banking
 agent or the activities one.
 
 In order to write an agent, take a look at agents/test and [this article](http://voiser.org/post/69721172250/introducing-zoe-deco).
