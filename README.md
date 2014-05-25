@@ -30,15 +30,15 @@ See the [gul-zoe repository at Github](https://github.com/guluc3m/gul-zoe) for m
 - Check the configuration files at etc/ folder.
 - Load the Zoe configuration:
 
-  . etc/environment.sh
+  $ . etc/environment.sh
 
 - Launch Zoe:
 
-  ./zoe.sh start
+  $ ./zoe.sh start
 
 - Check the Zoe status:
 
-  ./zoe.sh status
+  $ ./zoe.sh status
 
 If there are dead agents, check their log files (at the log/ directory) to figure out the error. It is probably a misconfiguration. 
 
