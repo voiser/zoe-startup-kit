@@ -1,0 +1,31 @@
+# Object files
+*.o
+
+# Libraries
+*.lib
+*.a
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Python stuff
+*.py[cod]
+__pycache__
+
+# Logs
+*.log
+logs/pids
+*.cache
+*.swp
+
+src/zoe-users.conf
+**/build
+*.sqlite3
