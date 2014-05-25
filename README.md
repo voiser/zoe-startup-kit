@@ -28,23 +28,45 @@ See the [gul-zoe repository at Github](https://github.com/guluc3m/gul-zoe) for m
 # How do I start
 
 - Check the configuration files at etc/ folder.
-- . etc/environment.sh
-- ./zoe.sh start
-- ./zoe.sh status
+- Load the Zoe configuration:
 
-  If there are dead agents, check their log files (at the log/ directory) to figure out the error. It is probably a misconfiguration. 
+  . etc/environment.sh
+
+- Launch Zoe:
+
+  ./zoe.sh start
+
+- Check the Zoe status:
+
+  ./zoe.sh status
+
+If there are dead agents, check their log files (at the log/ directory) to figure out the error. It is probably a misconfiguration. 
 
 
 
 # How do I add my own features
 
-- STEP ONE: Write your own agent. Take a look at agents/test and [this article](http://voiser.org/post/69721172250/introducing-zoe-deco)
+There are two basic parts in Zoe: agents and commands. 
 
-Now you can make your agent work by doing in a shell:
+## Agents
 
-  $ echo "message for your agent" | nc localhost 30000
+An agent is a process responsible of a single feature. To communicate, agents use messages, that are simple key-value pairs. 
+[This document](https://github.com/guluc3m/gul-zoe/blob/master/doc/messages.html) describes the message format and the set of messages
+already defined. Please note that that document contains messages for agents that are not available in this repository, like the banking
+agent or the activities one.
 
-- STEP TWO (optional) If you want to interact directly with your agent, you should specify a natural language command. [Take a look at this article](http://voiser.org/post/71342980952/zoe-commands)
+In order to write an agent, take a look at agents/test and [this article](http://voiser.org/post/69721172250/introducing-zoe-deco).
+
+Add your agent to the agents/ directory and Zoe will automatically run and configure it.
+
+## Commands
+
+You can easily send a message to an agent from the shell:
+
+  $ echo -n "message" | nc localhost 30000
+  
+But sometimes you would like to send these messages using a more simple interface. Take a look at the cmdproc/ folder 
+and [this article](http://voiser.org/post/71342980952/zoe-commands) to learn how to write your own commands.
 
 
 # I don't want mail or twitter or whatever. How can I disable that agent?
