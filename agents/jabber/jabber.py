@@ -67,8 +67,9 @@ class JabberAgent (sleekxmpp.ClientXMPP):
         jid = msg["from"]
         sender = self.finduser(jid)
         if not sender: 
-            self._listener.log("jabber", "WARNING", "received a jabber message from an unknown user ")
-            msg.reply("Lo siento, no me permiten hablar con desconocidos").send()
+            self._listener.log("jabber", "WARNING", "received a jabber message from an unknown user: " + jid.user + "@" + jid.domain)
+            print("Received a message from an unknown user:", jid.user + "@" + jid.domain)
+            msg.reply("Lo siento, no me permiten hablar con desconocidos. Si eres un usuario, tu Jabber ID ha quedado registrado en los logs, configura tu usuario correctamente").send()
             return
         text64 = base64.standard_b64encode(text.encode('utf-8')).decode('utf-8')
         aMap = {"dst":"relay",
