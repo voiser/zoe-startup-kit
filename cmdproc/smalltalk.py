@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONIOENCODING=utf-8 python3
 # -*- coding: utf-8 -*-
 #
 # This file is part of Zoe Assistant - https://github.com/guluc3m/gul-zoe
