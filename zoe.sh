@@ -129,7 +129,7 @@ case "$1" in
     stop
     start
     ;;
-  "" )
-  echo "usage: ./zoe.sh server|start|stop|status|restart"
+  * )
+    echo "usage: ./zoe.sh server|start|stop|status|restart"
     ;;
 esac
