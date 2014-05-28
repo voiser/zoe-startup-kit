@@ -5,6 +5,7 @@ export ZOE_LOGS=${ZOE_HOME}/logs
 export ZOE_VAR=${ZOE_HOME}/var
 export ZOE_DOMAIN=private
 export PYTHONPATH=${ZOE_HOME}/lib/python-dependencies:${ZOE_HOME}/lib/python:${PYTHONPATH}
+export PYTHONUNBUFFERED=1
 export PERL5LIB=${ZOE_HOME}/lib/perl:${PERL5LIB}
 
 #

@@ -1,4 +1,4 @@
-#!/usr/bin/env PYTHONUNBUFFERED=1 python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # This file is part of Zoe Assistant - https://github.com/guluc3m/gul-zoe

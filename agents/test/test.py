@@ -1,4 +1,4 @@
-#!/usr/bin/env PYTHONUNBUFFERED=1 python3
+#!/usr/bin/env python3
 
 import zoe
 from zoe.deco import *
