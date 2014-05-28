@@ -1,3 +1,4 @@
+#!/usr/bin/env PYTHONUNBUFFERED=1 python3
 # -*- coding: utf-8 -*-
 #
 # This file is part of Zoe Assistant - https://github.com/guluc3m/gul-zoe
@@ -25,63 +26,42 @@
 # THE SOFTWARE.
 
 import zoe
+from zoe.deco import *
 
+@Agent(name = "broadcast")
 class BroadcastAgent:
-    def __init__(self):
-        self._listener = zoe.Listener(self, name = "broadcast")
-        self._parser = None
-        self.requestUsers()
 
-    def start(self):
-        self._listener.start()
+    @Message(tags = ["send"])
+    def send(self, msg, to, group = "broadcast"):
+        users = zoe.Users()
+        if to:
+            return self.sendto(msg, to, users)
+        else:
+            return self.sendgrp(msg, group, users)
 
-    def stop(self):
-        self._listener.stop()
+    def sendgrp(self, msg, grpname, users):
+        self.logger.info("Sending message " + msg + " to group " + grpname)
+        return [self.sendto(msg, member, users) for member in users.membersof(grpname)]
 
-    def receive(self, parser):
-        tags = parser.tags()
-        if "users" in tags and "notification" in tags:
-            self.updateUsers(parser)
-        if "send" in tags:
-            self.send(parser)
+    def sendto(self, msg, user, users):
+        self.logger.info("Sending message " + msg + "to user" + user)
+        subject = users.subject(user)
+        preferred = subject["preferred"]
+        if preferred == "jabber":
+            return self.jabber(msg, user)
+        elif preferred == "mail":
+            return self.mail(msg, user)
+        elif preferred == "twitter":
+            return self.tweet(msg, user)
 
-    def updateUsers(self, parser):
-        self._parser = parser
-        self._listener.log("broadcast", "info", "Updating users info", parser)
-
-    def requestUsers(self, original = None):
-        msg = zoe.MessageBuilder({"dst":"users","tag":"notify"}).msg()
-        self._listener.sendbus(msg)
-        self._listener.log("broadcast", "info", "Sending users request", original)
-
-    def send(self, parser):
-        if not self._parser:
-            self.requestUsers(parser)
-            return
-        group = parser.get("group")
-        if not group:
-            group = "broadcast"
-        msg = parser.get("msg")
-        nicks = self._parser.list("group-" + group + "-members")
-        for nick in nicks:
-            preferred = self._parser.get(nick + "-preferred")
-            if preferred == "twitter":
-                self.tweet(nick, msg, parser)
-            if preferred == "mail":
-                self.mail(nick, msg, parser)
-
-    def tweet(self, nick, msg, original = None):
-        account = self._parser.get(nick + "-twitter")
-        tags = {"dst":"twitter", "to":account, "msg":msg}
-        self._listener.sendbus(zoe.MessageBuilder(tags, original).msg())
-        self._listener.log("broadcast", "info", "Sending message '" + msg + "' to " + account, original)
-
-    def mail(self, nick, msg, original = None):
-        account = self._parser.get(nick + "-mail")
-        tags = {"dst":"mail", 
-                "subject":"Message from Zoe",
-                "to":account, 
-                "txt":msg}
-        self._listener.sendbus(zoe.MessageBuilder(tags, original).msg())
-        self._listener.log("broadcast", "info", "Sending message '" + msg + "' to " + account, original)
-
+    def jabber(self, msg, user):
+        self.logger.info("Jabber to " + user)
+        return zoe.MessageBuilder({"dst":"jabber", "to":user, "msg":msg})
+    
+    def mail(self, msg, user):
+        self.logger.info("Mail to " + user)
+        return zoe.MessageBuilder({"dst":"mail", "subject":"Message from Zoe", "to":user, "txt":msg})
+        
+    def tweet(self, msg, user):
+        self.logger.info("Twit to " + user)
+        return zoe.MessageBuilder({"dst":"twitter", "to":user, "msg":msg})
