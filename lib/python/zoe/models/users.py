@@ -75,6 +75,12 @@ class Users:
                     aMap[key] = self._config[section][key]
                 ids[name] = aMap
         return ids
+        
+    def membersof(self, grpname):
+        try:
+            return self.group(grpname)["members"].split()
+        except Exception as e:
+            return []
 
     def subject(self, name):
         return self._config["subject " + name]
