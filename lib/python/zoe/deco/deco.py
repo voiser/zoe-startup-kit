@@ -113,6 +113,8 @@ class DecoratedListener:
     def docall(self, method, parser):
         print("Calling method", method, "with parameters", parser)
         args, varargs, keywords, defaults = inspect.getargspec(method)
+        defaults = dict(zip(reversed(args), reversed(defaults))) # taken from http://stackoverflow.com/questions/12627118/get-a-function-arguments-default-value
+        #print(defaults)
         args = args[1:]
         params = []
         for arg in args:
@@ -122,9 +124,12 @@ class DecoratedListener:
                 param = DecoratedLogger(self._listener, self._name, parser)
             elif parser.get(arg):
                 param = parser.get(arg)
+            elif arg in defaults:
+                param = defaults[arg]
             else:
                 param = None
             params.append(param)
+        self._agent.logger = DecoratedLogger(self._listener, self._name, parser)
         ret = method(*params)
         if ret:
             if not hasattr(ret, "__iter__"):
