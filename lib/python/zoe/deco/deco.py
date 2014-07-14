@@ -113,7 +113,8 @@ class DecoratedListener:
     def docall(self, method, parser):
         print("Calling method", method, "with parameters", parser)
         args, varargs, keywords, defaults = inspect.getargspec(method)
-        defaults = dict(zip(reversed(args), reversed(defaults))) # taken from http://stackoverflow.com/questions/12627118/get-a-function-arguments-default-value
+        if defaults:
+            defaults = dict(zip(reversed(args), reversed(defaults))) # taken from http://stackoverflow.com/questions/12627118/get-a-function-arguments-default-value
         #print(defaults)
         args = args[1:]
         params = []
