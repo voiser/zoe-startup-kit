@@ -24,14 +24,36 @@ function launch_server() {
 
 #
 # Starts an agent
-#   launch_agent [name] [path to agent executable file]
-# Returns its PID
+#   launch_agent [name]
+# Writes the PID into 'var/agent.pid' file
 #
 function launch_agent() {
     name="$1"
-    script="$2"
-    ${script} > ${ZOE_LOGS}/$name.log 2>&1 &
-    echo $!
+
+    pushd ${ZOE_HOME}/agents/$name > /dev/null 2>&1
+    for script in *
+    do
+        if [[ -f "$script" ]] && [[ -x "$script" ]]
+        then
+            echo "Launching agent $name ($script)..."
+            ./${script} > ${ZOE_LOGS}/$name.log 2>&1 &
+            sleep 1
+        fi
+    done
+    popd > /dev/null 2>&1
+
+    echo "$!" > ${ZOE_VAR}/$name.pid 
+}
+
+#
+# Restarts an agent
+# restart_agent [name]
+#
+function restart_agent() {
+    name="$1"
+
+    stop_agent $name
+    launch_agent $name
 }
 
 #
@@ -53,17 +75,9 @@ function start() {
     do
         if [[ -d "$f" ]]
         then
-            pushd $f > /dev/null 2>&1
-            for script in *
-            do
-                if [[ -f "$script" ]] && [[ -x "$script" ]]
-                then
-                    echo "Launching agent $f ($script)..."
-                    launch_agent $f ./$script > ${ZOE_VAR}/$f.pid
-                    sleep 1
-                fi
-            done
-            popd > /dev/null 2>&1
+            popd >/dev/null 2>&1
+            launch_agent $f
+            pushd ${ZOE_HOME}/agents > /dev/null 2>&1
         fi
     done
     popd >/dev/null 2>&1
@@ -78,11 +92,28 @@ function stop() {
         if [[ -f "$f" ]]
         then
             pid=$(cat $f)
-            echo "stopping process $pid ($f)"
+            echo "Stopping process $pid ($f)"
             kill "$pid"
             rm "$f"
         fi
     done
+}
+
+#
+# Stops a single Zoe agent
+# stop_agent [name]
+#
+function stop_agent() {
+    name="$1"
+    f="${ZOE_VAR}/$name.pid"
+
+    if  [[ -f "$f" ]]
+    then
+        pid=$(cat $f)
+        echo "Stopping process $pid ($f)"
+        kill "$pid"
+        rm "$f"
+    fi
 }
 
 #
@@ -130,7 +161,16 @@ case "$1" in
     stop
     start
     ;;
+  "launch-agent" )
+    launch_agent "$2"
+    ;;
+  "stop-agent" )
+    stop_agent "$2"
+    ;;
+  "restart-agent" )
+    restart_agent "$2"
+    ;;
   * )
-    echo "usage: ./zoe.sh server|start|stop|status|restart"
+    echo "usage: ./zoe.sh server|start|stop|status|restart|launch-agent <name>|stop-agent <name>|restart-agent <name>"
     ;;
 esac
