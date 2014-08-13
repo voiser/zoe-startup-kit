@@ -3,12 +3,6 @@
 export ZOE_SERVER_HOST=localhost
 export ZOE_SERVER_PORT=30000
 
-# Get this from twitter
-export zoe_twitter_consumer_key="..."
-export zoe_twitter_consumer_secret="..."
-export zoe_twitter_access_token="..."
-export zoe_twitter_access_token_secret="..."
-
 # Paramters for Google Talk
 export zoe_jabber_host="talk.google.com"
 export zoe_jabber_port="5222"
