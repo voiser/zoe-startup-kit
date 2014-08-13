@@ -60,6 +60,7 @@ class DecoratedListener:
             k = getattr(agent, m)
             if hasattr(k, "__zoe__tags__"):
                 self._candidates.append(k)
+        #print("Candidates:", self._candidates)
         print("Launching agent", self._name)
         self._listener = zoe.Listener(self, name = self._name)
         if self._listener._dyn:
@@ -85,7 +86,7 @@ class DecoratedListener:
     def dispatch(self, tags, parser):
         chosen = []
         for c in self._candidates:
-            #print("  Candidate: ", c)
+            #print("  Candidate: ", c, getattr(c, '__zoe__tags__'))
             expected = c.__zoe__tags__
             #print("  Expected: ", expected)
             if self.match(tags, expected):
@@ -105,10 +106,16 @@ class DecoratedListener:
 
     def match(self, tags, expected):
         #print("    Trying to match", tags, " with ", expected)
-        for t in expected:
-            if not t in tags:
-                return False
-        return True
+        if tags == [] and expected == []:
+            # default message
+            return True
+        try:
+            for t in expected:
+                if not t in tags:
+                    return False
+                return True
+        except Exception as e:
+            return False
 
     def docall(self, method, parser):
         print("Calling method", method, "with parameters", parser)
@@ -116,6 +123,8 @@ class DecoratedListener:
         if defaults:
             defaults = dict(zip(reversed(args), reversed(defaults))) # taken from http://stackoverflow.com/questions/12627118/get-a-function-arguments-default-value
         #print(defaults)
+        if defaults is None:
+            defaults = {}
         args = args[1:]
         params = []
         for arg in args:
@@ -143,8 +152,10 @@ class DecoratedListener:
 class Message:
     def __init__(self, tags):
         self._tags = tags
+        #print("Message with tags", self._tags)
 
     def __call__(self, f):
+        #print("Setting tags", self._tags, "to", f)
         setattr(f, "__zoe__tags__", self._tags)
         return f
 
