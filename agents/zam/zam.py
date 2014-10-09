@@ -37,33 +37,23 @@ from os.path import join as path
 from semantic_version import Version
 from zoe.deco import *
 
+ZCONF_PATH = path(env["ZOE_HOME"], "etc", "zoe.conf")
 ZAM_TEMP = path(env["ZOE_VAR"], "zam")
 ZAM_LIST = path(env["ZOE_HOME"], "etc", "zam", "list")
 ZAM_INFO = path(env["ZOE_HOME"], "etc", "zam", "info")
 
 
-@Agent(name = "zam")
+@Agent(name="zam")
 class AgentManager:
 
-    @Message(tags = ["add"])
+    @Message(tags=["add"])
     def add(self, name, source):
         """ Add an agent to the list. """
         alist = self.read_list()
 
-        if name in alist.sections():
-            print("Agent %s is already in the list" % name)
-            return
+        self.add_to_list(name, source, alist, False)
 
-        alist.add_section(name)
-        alist[name]["source"] = str(source)
-        alist[name]["installed"] = "0"
-        alist[name]["version"] = ""
-
-        self.write_list(alist)
-
-        print("Added new agent %s to the list" % name)
-
-    @Message(tags = ["clean"])
+    @Message(tags=["clean"])
     def clean(self):
         """ Clean the temp data stored in var/zam. """
         try:
@@ -72,7 +62,7 @@ class AgentManager:
             # Nothing to remove?
             pass
 
-    @Message(tags = ["forget"])
+    @Message(tags=["forget"])
     def forget(self, name):
         """ Remove an agent from the agent list.
 
@@ -91,7 +81,7 @@ class AgentManager:
 
         print("Removed agent %s from agent list" % name)
 
-    @Message(tags = ["install"])
+    @Message(tags=["install"])
     def install(self, name, source=None):
         """ Install an agent from source. """
         alist = self.read_list()
@@ -105,8 +95,7 @@ class AgentManager:
                 print("Source not found")
                 return
             else:
-                self.add(name, source)
-                alist = self.read_list()
+                alist = self.add_to_list(name, source, alist)
 
         self.clean()
 
@@ -129,7 +118,7 @@ class AgentManager:
         if os.path.isfile(preinst):
             st = os.stat(preinst)
             os.chmod(preinst, st.st_mode | stat.S_IEXEC)
-            proc = subprocess.call([preinst,])
+            proc = subprocess.call([preinst, ])
             print("Ran preinst script, got code %i" % proc)
 
         # INSTALL
@@ -148,15 +137,13 @@ class AgentManager:
         os.chmod(script, st.st_mode | stat.S_IEXEC)
 
         # Make cmdproc scripts executable
-        for f in file_list:
-            if f.startswith(path(env["ZOE_HOME"], "cmdproc")):
-                st = os.stat(f)
-                os.chmod(f, st.st_mode | stat.S_IEXEC)
+        for f in [cf for cf in file_list if cf.startswith("cmdproc")]:
+            df = path(env["ZOE_HOME"], f)
+            st = os.stat(df)
+            os.chmod(df, st.st_mode | stat.S_IEXEC)
 
         # Add agent to the zoe.conf file
-        conf_path = path(env["ZOE_HOME"], "etc", "zoe.conf")
-        zconf = ConfigParser()
-        zconf.read(conf_path)
+        zconf = self.read_conf()
 
         ports = []
         for sec in zconf.sections():
@@ -172,8 +159,14 @@ class AgentManager:
 
         zconf.add_section("agent " + name)
         zconf["agent " + name]["port"] = str(free_port)
-        with open(conf_path, 'w') as configfile:
-            zconf.write(configfile)
+
+        topics = []
+        if a_info["info"]["topics"]:
+            topics = a_info["info"]["topics"].split(" ")
+
+        zconf = self.topics_install(name, topics, zconf)
+
+        self.write_conf(zconf)
 
         # Update agent list
         alist[name]["installed"] = "1"
@@ -188,7 +181,7 @@ class AgentManager:
         if os.path.isfile(postinst):
             st = os.stat(postinst)
             os.chmod(postinst, st.st_mode | stat.S_IEXEC)
-            proc = subprocess.call([postinst,])
+            proc = subprocess.call([postinst, ])
             print("Ran postinst script, got code %i" % proc)
 
         # Store config files list (if any)
@@ -197,7 +190,7 @@ class AgentManager:
             conflist = []
             with open(info_conf, "r") as conffile:
                 for c in conffile.read().splitlines():
-                    conflist.append(path(env["ZOE_HOME"], c))
+                    conflist.append(c)
 
             with open(path(ZAM_INFO, name + ".conffiles"), "w+") as stored_conf:
                 for c in conflist:
@@ -207,10 +200,9 @@ class AgentManager:
         self.clean()
 
         # Launch the agent (and register it)
-        #return self.launch(name, os.path.split(script)[1])
         return self.launch(name)
 
-    @Message(tags = ["launch"])
+    @Message(tags=["launch"])
     def launch(self, name):
         """ Launch an agent. """
         agent_dir = path(env["ZOE_HOME"], "agents", name)
@@ -224,26 +216,23 @@ class AgentManager:
             "launch-agent", name], stdout=log_file, stderr=log_file,
             cwd=env["ZOE_HOME"])
 
-        
-        conf_path = path(env["ZOE_HOME"], "etc", "zoe.conf")
-        zconf = ConfigParser()
-        zconf.read(conf_path)
+        zconf = self.read_conf()
 
         # Force the agent to register
         port = zconf["agent " + name]["port"]
-        msg = { "dst":"server", 
-                "tag":"register",
-                "name":name, 
-                "host":env["ZOE_SERVER_HOST"], 
-                "port":port }
+        msg = {
+            "dst": "server",
+            "tag": "register",
+            "name": name,
+            "host": env["ZOE_SERVER_HOST"],
+            "port": port
+        }
 
         return zoe.MessageBuilder(msg)
 
-    @Message(tags = ["purge"])
+    @Message(tags=["purge"])
     def purge(self, name):
         """ Remove an agent's configuration files. """
-        alist = self.read_list()
-        
         # Uninstall the agent
         self.remove(name)
 
@@ -254,7 +243,8 @@ class AgentManager:
             return
 
         with open(confpath, "r") as conflist:
-            for c in conflist.read().splitlines():
+            for cf in conflist.read().splitlines():
+                c = path(env["ZOE_HOME"], cf)
                 print("Removing %s" % c)
                 try:
                     os.remove(c)
@@ -266,7 +256,7 @@ class AgentManager:
 
         print("Agent %s purged" % name)
 
-    @Message(tags = ["remove"])
+    @Message(tags=["remove"])
     def remove(self, name):
         """ Uninstall an agent.
 
@@ -283,27 +273,39 @@ class AgentManager:
             self.stop(name)
 
         # Remove from zoe.conf
-        conf_path = path(env["ZOE_HOME"], "etc", "zoe.conf")
-        zconf = ConfigParser()
-        zconf.read(conf_path)
+        zconf = self.read_conf()
 
         if "agent " + name in zconf.sections():
             zconf.remove_section("agent " + name)
 
-        with open(conf_path, "w") as configfile:
-            zconf.write(configfile)
+        for topic in [t for t in zconf.sections() if t.startswith("topic")]:
+            topic_agents = zconf[topic]["agents"].split(" ")
+
+            try:
+                topic_agents.remove(name)
+                if not topic_agents:
+                    zconf.remove_section(topic)
+                else:
+                    zconf[topic]["agents"] = " ".join(topic_agents)
+
+            except:
+                # Not in the list
+                continue
+
+        self.write_conf(zconf)
 
         # Remove agent files and directories
         flist_path = path(ZAM_INFO, name + ".list")
         with open(flist_path, "r") as flist:
-            for l in flist.read().splitlines():
+            for f in flist.read().splitlines():
+                l = path(env["ZOE_HOME"], f)
                 # Remove final file
                 os.remove(l)
                 # Remove the tree that was generated in the installation
                 dirs = os.path.split(l)
                 while dirs[0] != "/":
                     if os.listdir(dirs[0]):
-                        break    
+                        break
                     shutil.rmtree(dirs[0])
                     dirs = os.path.split(dirs[0])
 
@@ -316,7 +318,7 @@ class AgentManager:
 
         print("Agent %s uninstalled" % name)
 
-    @Message(tags = ["restart"])
+    @Message(tags=["restart"])
     def restart(self, name):
         """ Restart an agent. """
         if not self.running(name):
@@ -329,7 +331,7 @@ class AgentManager:
             "restart-agent", name], stdout=log_file, stderr=log_file,
             cwd=env["ZOE_HOME"])
 
-    @Message(tags = ["stop"])
+    @Message(tags=["stop"])
     def stop(self, name):
         """ Stop an agent's execution. """
         if not self.running(name):
@@ -342,7 +344,7 @@ class AgentManager:
             "stop-agent", name], stdout=log_file, stderr=log_file,
             cwd=env["ZOE_HOME"])
 
-    @Message(tags = ["update"])
+    @Message(tags=["update"])
     def update(self, name):
         """ Update an installed agent. """
         alist = self.read_list()
@@ -380,7 +382,7 @@ class AgentManager:
         if os.path.isfile(preupd):
             st = os.stat(preupd)
             os.chmod(preupd, st.st_mode | stat.S_IEXEC)
-            proc = subprocess.call([preupd,])
+            proc = subprocess.call([preupd, ])
             print("Ran preupd script, got code %i" % proc)
 
         # UPDATE
@@ -399,21 +401,29 @@ class AgentManager:
         os.chmod(script, st.st_mode | stat.S_IEXEC)
 
         # Make cmdproc scripts executable
-        for f in file_list:
-            if f.startswith(path(env["ZOE_HOME"], "cmdproc")):
-                st = os.stat(f)
-                os.chmod(f, st.st_mode | stat.S_IEXEC)
+        for f in [cf for cf in file_list if cf.startswith("cmdproc")]:
+            df = path(env["ZOE_HOME"], f)
+            st = os.stat(df)
+            os.chmod(df, st.st_mode | stat.S_IEXEC)
 
         # Update version
         alist[name]["version"] = str(remote_ver)
         self.write_list(alist)
+
+        # Update topics
+        topics = []
+        if a_info["info"]["topics"]:
+            topics = a_info["info"]["topics"].split(" ")
+
+        zconf = self.topics_update(name, topics)
+        self.write_conf(zconf)
 
         # POSTUPDATE
         postupd = path(temp, "zam", "postupd")
         if os.path.isfile(postupd):
             st = os.stat(postupd)
             os.chmod(postupd, st.st_mode | stat.S_IEXEC)
-            proc = subprocess.call([postupd,])
+            proc = subprocess.call([postupd, ])
             print("Ran postupd script, got code %i" % proc)
 
         # Cleanup
@@ -422,12 +432,39 @@ class AgentManager:
         # Restart the agent
         self.restart(name)
 
+    def add_to_list(self, name, source, alist, ret=True):
+        """ Add an agent to the list.
+
+            name -- name of the anget to install. Will be checked against
+                the agent list
+            source -- git repository URL to the source
+            alist -- agent list file
+            ret -- whether or not this function should return the new list
+        """
+        new_alist = alist
+
+        if name in new_alist.sections():
+            print("Agent %s is already in the list" % name)
+            return
+
+        new_alist.add_section(name)
+        new_alist[name]["source"] = str(source)
+        new_alist[name]["installed"] = "0"
+        new_alist[name]["version"] = ""
+
+        self.write_list(new_alist)
+
+        print("Added new agent %s to the list" % name)
+
+        if ret:
+            return new_alist
+
     def fetch(self, name, source):
         """ Download the source of the agent to var/zam/name. """
         temp = path(ZAM_TEMP, name)
         alist = self.read_list()
 
-        try:   
+        try:
             if not source:
                 src = alist[name]["source"]
             else:
@@ -466,41 +503,54 @@ class AgentManager:
 
         if updating:
             # Diff list
+            diff_list = []
             for src in src_list:
-                diff_list = []
-                stripped = src.replace(source_dir + "/", "")
-                diff_list.append(path(env["ZOE_HOME"], stripped))
+                stripped = src.replace(source_dir, "")
+                stripped = self.remove_slash(stripped)
+                diff_list.append(stripped)
 
             # Compare file lists and remove those not present in the update
             alist_path = path(ZAM_INFO, name + ".list")
             with open(alist_path, "r") as alist:
-                for l in alist.read().splitlines():
-                    if l not in diff_list:
-                        # Remove final file
-                        os.remove(l)
-                        # Remove the generated tree
-                        dirs = os.path.split(l)
-                        while dirs[0] != "/":
-                            if os.listdir(dirs[0]):
-                                break    
-                            shutil.rmtree(dirs[0])
-                            dirs = os.path.split(dirs[0])
+                for f in [p for p in alist.read().splitlines() if p not in diff_list]:
+                    l = path(env["ZOE_HOME"], f)
+                    # Remove final file
+                    os.remove(l)
+                    # Remove the generated tree
+                    dirs = os.path.split(l)
+                    while dirs[0] != "/":
+                        if os.listdir(dirs[0]):
+                            break
+                        shutil.rmtree(dirs[0])
+                        dirs = os.path.split(dirs[0])
 
         # Move files
         file_list = []
         for src in src_list:
-            stripped = src.replace(source_dir + "/", "")
+            stripped = src.replace(source_dir, "")
+            stripped = self.remove_slash(stripped)
             dst = os.path.dirname(path(env["ZOE_HOME"], stripped))
-            
+
             try:
                 os.makedirs(dst)
             except:
                 # Tree already exists?
                 pass
-            
-            file_list.append(shutil.copy(src, dst))
+
+            new_path = shutil.copy(src, dst)
+            new_path = new_path.replace(env["ZOE_HOME"], "")
+            new_path = self.remove_slash(new_path)
+
+            file_list.append(new_path)
 
         return file_list
+
+    def read_conf(self):
+        """ Read the Zoe configuration file located in etc/zoe.conf. """
+        conf = ConfigParser()
+        conf.read(ZCONF_PATH)
+
+        return conf
 
     def read_list(self):
         """ Read the agent list.
@@ -512,6 +562,15 @@ class AgentManager:
 
         return alist
 
+    def remove_slash(self, path):
+        """ Remove initial slash (/) from path (if any). """
+        new_path = path
+
+        if path.startswith("/"):
+            new_path = path[0].replace("/", "") + path[1:]
+
+        return new_path             
+
     def running(self, name):
         """ Check if an agent is running. """
         # We depend on the .pid files here
@@ -521,6 +580,70 @@ class AgentManager:
             return True
 
         return False
+
+    def topics_install(self, agent, topics, conf=None):
+        """ Set the topics an agent listens to DURING INSTALLATION.
+
+            If the zoe conf file is not passed, will read it.
+        """
+        zconf = conf
+        if not zconf:
+            zconf = self.read_conf()
+
+        for topic in topics:
+            topic_section = "topic " + topic
+
+            if topic_section not in zconf.sections():
+                zconf.add_section(topic_section)
+                zconf[topic_section]["agents"] = ""
+
+            topic_agents = zconf[topic_section]["agents"].split(" ")
+
+            if agent not in topic_agents:
+                topic_agents.append(agent)
+                zconf[topic_section]["agents"] = " ".join(topic_agents)
+
+        return zconf
+
+    def topics_update(self, agent, topics, conf=None):
+        """ Set the topics an agent listens to DURING UPDATE.
+
+            If the zoe conf file is not passed, will read it.
+        """
+        zconf = conf
+        if not zconf:
+            zconf = self.read_conf()
+
+        # Insert missing topics
+        for topic in topics:
+            topic_section = "topic " + topic
+
+            if topic_section not in zconf.sections():
+                zconf.add_section(topic_section)
+                zconf[topic_section]["agents"] = ""
+
+        for topic_section in [
+                t for t in zconf.sections() if t.startswith("topic")]:
+            topic_agents = zconf[topic_section]["agents"].split(" ")
+
+            if agent in topic_agents and topic_section.replace(
+                    "topic ", "") not in topics:
+                # Currently present and should not be
+                topic_agents.remove(agent)
+
+            elif agent not in topic_agents and topic_section.replace(
+                    "topic ", "") in topics:
+                # Not present and should be
+                topic_agents.append(agent)
+
+            zconf[topic_section]["agents"] = " ".join(topic_agents)
+
+        return zconf
+
+    def write_conf(self, zconf):
+        """ Write Zoe configuration into etc/zoe.conf. """
+        with open(ZCONF_PATH, 'w') as configfile:
+            zconf.write(configfile)
 
     def write_list(self, lparser):
         """ Write data into agent list. """
