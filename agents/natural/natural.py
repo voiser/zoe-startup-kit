@@ -50,16 +50,21 @@ class NaturalAgent:
     def show(self, title, thing):
         print(title, json.dumps(thing, sort_keys = True, indent = 4))
 
-    def reload(self):
+    def reload(self, parser):
         fuzzy = zoe.Fuzzy()
         cmdproc = os.environ["ZOE_HOME"] + "/cmdproc"
         procs = [cmdproc + "/" + f for f in os.listdir(cmdproc)]
         procs = [p for p in procs if os.access(p, os.X_OK)]
         self._commands = {}
         for proc in procs:
-            p = subprocess.Popen(proc + " --get", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            shellcmd = [proc, "--get"]
+            self.fill(parser, shellcmd)
+            cmd = " ".join(shellcmd)
+            print("Will execute:", cmd)
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             for line in p.stdout.readlines():
                 pattern = line.decode("utf-8")
+                print("  Got", pattern)
                 if pattern[0] == '/' and pattern[-1] == '/':
                     self._commands[pattern] = (proc, [])
                 else:
@@ -102,7 +107,7 @@ class NaturalAgent:
         return None
 
     def command(self, parser):
-        self.reload()
+        self.reload(parser)
         self.show("Received parser:", parser._map)
         cmd64 = parser.get("cmd")
         cmd = base64.standard_b64decode(cmd64.encode("utf-8")).decode("utf-8")
