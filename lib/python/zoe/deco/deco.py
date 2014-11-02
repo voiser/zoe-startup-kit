@@ -60,6 +60,8 @@ class DecoratedListener:
             k = getattr(agent, m)
             if hasattr(k, "__zoe__tags__"):
                 self._candidates.append(k)
+            if hasattr(k, "__zoe__anymessage__"):
+                self._candidates.append(k)
         #print("Candidates:", self._candidates)
         print("Launching agent", self._name)
         self._listener = zoe.Listener(self, name = self._name)
@@ -86,9 +88,10 @@ class DecoratedListener:
     def dispatch(self, tags, parser):
         chosen = []
         for c in self._candidates:
-            #print("  Candidate: ", c, getattr(c, '__zoe__tags__'))
+            if hasattr(c, "__zoe__anymessage__"):
+                chosen.append(c)
+                continue
             expected = c.__zoe__tags__
-            #print("  Expected: ", expected)
             if self.match(tags, expected):
                 #print("    Valid candidate")
                 chosen.append(c)
@@ -101,7 +104,7 @@ class DecoratedListener:
                 print(c, c.__zoe__tags__)
             return
         c = chosen[0]
-        print("Candidate found:", chosen[0], "given", tags, "expected", c.__zoe__tags__)
+        print("Candidate found:", chosen[0])
         self.docall(c, parser)
 
     def match(self, tags, expected):
@@ -157,6 +160,14 @@ class Message:
     def __call__(self, f):
         #print("Setting tags", self._tags, "to", f)
         setattr(f, "__zoe__tags__", self._tags)
+        return f
+
+class AnyMessage:
+    def __init__(self):
+        pass
+
+    def __call__(self, f):
+        setattr(f, "__zoe__anymessage__", True)
         return f
 
 class Agent:
