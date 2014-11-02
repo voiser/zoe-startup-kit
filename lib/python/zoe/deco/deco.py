@@ -113,7 +113,7 @@ class DecoratedListener:
             for t in expected:
                 if not t in tags:
                     return False
-                return True
+            return True
         except Exception as e:
             return False
 
