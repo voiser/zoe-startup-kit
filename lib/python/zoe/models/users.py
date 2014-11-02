@@ -43,6 +43,7 @@ class Users:
             kind, name = section.split(" ")
             if kind == "subject":
                 sec = self._config[section]
+                sec["uniqueid"] = name
                 if "alias" in sec:
                     for alias in sec["alias"].split():
                         self._config["subject " + alias] = sec
