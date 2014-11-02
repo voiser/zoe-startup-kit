@@ -31,7 +31,11 @@ from zoe.deco import *
 @Agent("relay")
 class RelayAgent:
 
-    @Message(tags = ["relay"])
+    @Message(tags = ["hola"])
+    def cosa(self):
+        pass
+    
+    @AnyMessage()
     def receive(self, parser):
         print("Received", parser)
         builder = zoe.MessageBuilder.fromparser(parser)
