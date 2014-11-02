@@ -77,8 +77,10 @@ Just remove it from the agents/ folder.
 # Where can I find more information?
 
 - In English:
+ - [The Zoe documentation project](http://zoe.readthedocs.org/en/latest/)
  - [Some articles about Zoe](http://voiser.org/)
 - In Spanish:
  - [GUL UC3M mailing list](https://gul.uc3m.es/mailman/listinfo/gul)
  - [GUL UC3M twitter account](https://twitter.com/guluc3m)
  - [An introductory video about programming Zoe](https://www.youtube.com/watch?v=3ApdZpXHGns)
+ - [A talk about Zoe at Hackers UC3M (starting at 23:50)](http://homer.uc3m.es:8000/podcast/0910/20141015_Presentacion_Hackers_UC3M.mp4)
