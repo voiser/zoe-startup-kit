@@ -25,3 +25,4 @@
 # THE SOFTWARE.
 
 from zoe.state.command import *
+from zoe.state.file import *
