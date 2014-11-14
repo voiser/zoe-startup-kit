@@ -26,6 +26,9 @@
 
 import zoe
 import inspect
+import time
+import threading
+import traceback
 
 class DecoratedLogger:
 
@@ -55,6 +58,7 @@ class DecoratedListener:
         self._agent = agent
         self._name = name
         self._candidates = []
+        self._timed = []
         self._topic = topic
         for m in dir(agent):
             k = getattr(agent, m)
@@ -62,13 +66,32 @@ class DecoratedListener:
                 self._candidates.append(k)
             if hasattr(k, "__zoe__anymessage__"):
                 self._candidates.append(k)
+            if hasattr(k, "__zoe__timed__"):
+                self._timed.append(k)
         #print("Candidates:", self._candidates)
+
+        print("Launching timed methods")
+        for k in self._timed:
+            self._fetchThread = threading.Thread (target = self.timed(k))
+            self._fetchThread.start()
+        
         print("Launching agent", self._name)
         self._listener = zoe.Listener(self, name = self._name)
         if self._listener._dyn:
             self._listener.start(self.register)
         else:
             self._listener.start()
+
+    def timed(self, f):
+        def timed0():
+            while True:
+                try:
+                    response = f()
+                    self.sendresponse(response)
+                except Exception as e:
+                    traceback.print_exc()
+                time.sleep(f.__zoe__timed__)
+        return timed0
 
     def register(self):
         msg = { "dst":"server", 
@@ -144,6 +167,9 @@ class DecoratedListener:
             params.append(param)
         self._agent.logger = DecoratedLogger(self._listener, self._name, parser)
         ret = method(*params)
+        self.sendresponse(ret)
+
+    def sendresponse(self, ret):
         if ret:
             if not hasattr(ret, "__iter__"):
                 ret = [ret]
@@ -168,6 +194,14 @@ class AnyMessage:
 
     def __call__(self, f):
         setattr(f, "__zoe__anymessage__", True)
+        return f
+
+class Timed:
+    def __init__(self, period):
+        self._period = period
+
+    def __call__(self, f):
+        setattr(f, "__zoe__timed__", self._period)
         return f
 
 class Agent:
