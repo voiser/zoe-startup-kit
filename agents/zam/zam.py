@@ -47,11 +47,11 @@ ZAM_INFO = path(env["ZOE_HOME"], "etc", "zam", "info")
 class AgentManager:
 
     @Message(tags=["add"])
-    def add(self, name, source):
+    def add(self, name, source, sender=None):
         """ Add an agent to the list. """
         alist = self.read_list()
 
-        self.add_to_list(name, source, alist, False)
+        self.add_to_list(name, source, alist, False, sender)
 
     @Message(tags=["clean"])
     def clean(self):
@@ -63,7 +63,7 @@ class AgentManager:
             pass
 
     @Message(tags=["forget"])
-    def forget(self, name):
+    def forget(self, name, sender=None):
         """ Remove an agent from the agent list.
 
             The agent must be uninstalled first, and means that in order to
@@ -72,30 +72,34 @@ class AgentManager:
         alist = self.read_list()
 
         if self.installed(name, alist):
-            print("Agent %s is installed, uninstall it first" % name)
-            return
+            msg = "Agent %s is installed, uninstall it first" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         if name in alist.sections():
             alist.remove_section(name)
             self.write_list(alist)
-
-        print("Removed agent %s from agent list" % name)
+        msg = "Removed agent %s from agent list" % name
+        print(msg)
+        return self.feedback(msg, sender)
 
     @Message(tags=["install"])
-    def install(self, name, source=None):
+    def install(self, name, source=None, sender=None):
         """ Install an agent from source. """
         alist = self.read_list()
 
         if self.installed(name, alist):
-            print("Agent %s is already installed" % name)
-            return
+            msg = "Agent %s is already installed" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         if name not in alist.sections():
             if not source:
-                print("Source not found")
-                return
-            else:
-                alist = self.add_to_list(name, source, alist)
+                msg = "Source not found"
+                print(msg)
+                return self.feedback(msg, sender)
+
+            alist = self.add_to_list(name, source, alist, sender=sender)
 
         self.clean()
 
@@ -103,15 +107,18 @@ class AgentManager:
         git_code = self.fetch(name, source)
 
         if git_code != 0:
-            print("Could not fetch source")
+            msg = "Could not fetch source"
+            print(msg)
             self.clean()
-            return
+            return self.feedback(msg, sender)
 
-        info_path = path(temp, "zam", "info")
-        a_info = ConfigParser()
-        # Add a dummy section
-        a_info.read_string(StringIO(
-            "[info]\n%s" % open(info_path).read()).read())
+        a_info = self.parse_info(path(temp, "zam", "info"));
+
+        # Version is mandatory!
+        if not a_info["version"]:
+            msg = "Missing version in info file for %s" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         # PREINSTALL
         preinst = path(temp, "zam", "preinst")
@@ -119,6 +126,7 @@ class AgentManager:
             st = os.stat(preinst)
             os.chmod(preinst, st.st_mode | stat.S_IEXEC)
             proc = subprocess.call([preinst, ])
+
             print("Ran preinst script, got code %i" % proc)
 
         # INSTALL
@@ -131,10 +139,14 @@ class AgentManager:
                 dfile.write("%s\n" % f)
 
         # Make script executable
-        script = path(env["ZOE_HOME"], "agents",
-            name, a_info["info"]["script"])
-        st = os.stat(script)
-        os.chmod(script, st.st_mode | stat.S_IEXEC)
+        #
+        # There may be cases where an agent is only formed by natural
+        # language files, so this key may not be present.
+        if a_info["script"]:
+            script = path(env["ZOE_HOME"], "agents",
+                name, a_info["script"])
+            st = os.stat(script)
+            os.chmod(script, st.st_mode | stat.S_IEXEC)
 
         # Make cmdproc scripts executable
         for f in [cf for cf in file_list if cf.startswith("cmdproc")]:
@@ -160,17 +172,16 @@ class AgentManager:
         zconf.add_section("agent " + name)
         zconf["agent " + name]["port"] = str(free_port)
 
-        topics = []
-        if a_info["info"]["topics"]:
-            topics = a_info["info"]["topics"].split(" ")
-
-        zconf = self.topics_install(name, topics, zconf)
+        # Topics are optional
+        if a_info["topics"]:
+            topics = a_info["topics"].split(" ")
+            zconf = self.topics_install(name, topics, zconf)
 
         self.write_conf(zconf)
 
         # Update agent list
         alist[name]["installed"] = "1"
-        alist[name]["version"] = a_info["info"]["version"]
+        alist[name]["version"] = a_info["version"]
 
         self.write_list(alist)
 
@@ -200,15 +211,20 @@ class AgentManager:
         self.clean()
 
         # Launch the agent (and register it)
-        return self.launch(name)
+        if a_info["script"]:
+            return [
+                self.feedback("Agent %s installed correctly" % name, sender),
+                self.launch(name, sender)
+            ]
 
     @Message(tags=["launch"])
-    def launch(self, name):
+    def launch(self, name, sender=None):
         """ Launch an agent. """
         agent_dir = path(env["ZOE_HOME"], "agents", name)
         if not os.path.isdir(agent_dir):
-            print("Agent %s does not exist!" % name)
-            return
+            msg = "Agent %s does not exist!" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         # Redirect stdout and stderr to zam's log
         log_file = open(path(env["ZOE_LOGS"], "zam.log"), "a")
@@ -220,7 +236,7 @@ class AgentManager:
 
         # Force the agent to register
         port = zconf["agent " + name]["port"]
-        msg = {
+        launch_msg = {
             "dst": "server",
             "tag": "register",
             "name": name,
@@ -228,10 +244,14 @@ class AgentManager:
             "port": port
         }
 
-        return zoe.MessageBuilder(msg)
+
+        return [
+            self.feedback("Launching agent %s" % name, sender),
+            zoe.MessageBuilder(launch_msg)
+        ]
 
     @Message(tags=["purge"])
-    def purge(self, name):
+    def purge(self, name, sender=None):
         """ Remove an agent's configuration files. """
         # Uninstall the agent
         self.remove(name)
@@ -239,8 +259,9 @@ class AgentManager:
         # Remove config files
         confpath = path(ZAM_INFO, name + ".conffiles")
         if not os.path.isfile(confpath):
-            print("Agent %s has no config files" % name)
-            return
+            msg = "Agent %s has no config files" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         with open(confpath, "r") as conflist:
             for cf in conflist.read().splitlines():
@@ -254,10 +275,13 @@ class AgentManager:
 
         os.remove(confpath)
 
-        print("Agent %s purged" % name)
+        msg = "Agent %s purged" % name
+        print(msg)
+
+        return self.feedback(msg, sender)
 
     @Message(tags=["remove"])
-    def remove(self, name):
+    def remove(self, name, sender=None):
         """ Uninstall an agent.
 
             Any additional files (such as configuration files) are kept
@@ -266,11 +290,12 @@ class AgentManager:
         alist = self.read_list()
 
         if not self.installed(name, alist):
-            print("Agent %s is not installed" % name)
-            return
+            msg = "Agent %s is not installed" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         if self.running(name):
-            self.stop(name)
+            self.stop(name, sender)
 
         # Remove from zoe.conf
         zconf = self.read_conf()
@@ -316,14 +341,18 @@ class AgentManager:
         alist[name]["version"] = ""
         self.write_list(alist)
 
-        print("Agent %s uninstalled" % name)
+        msg = "Agent %s uninstalled" % name
+        print(msg)
+
+        return self.feedback(msg, sender)
 
     @Message(tags=["restart"])
-    def restart(self, name):
+    def restart(self, name, sender=None):
         """ Restart an agent. """
         if not self.running(name):
-            print("Agent %s is not running" % name)
-            return
+            msg = "Agent %s is not running" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         # Redirect stdout and stderr to zam's log
         log_file = open(path(env["ZOE_LOGS"], "zam.log"), "a")
@@ -331,12 +360,15 @@ class AgentManager:
             "restart-agent", name], stdout=log_file, stderr=log_file,
             cwd=env["ZOE_HOME"])
 
+        return self.feedback("Restarting agent %s" % name, sender)
+
     @Message(tags=["stop"])
-    def stop(self, name):
+    def stop(self, name, sender=None):
         """ Stop an agent's execution. """
         if not self.running(name):
-            print("Agent %s is not running" % name)
-            return
+            msg = "Agent %s is not running" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         # Redirect stdout and stderr to zam's log
         log_file = open(path(env["ZOE_LOGS"], "zam.log"), "a")
@@ -344,14 +376,17 @@ class AgentManager:
             "stop-agent", name], stdout=log_file, stderr=log_file,
             cwd=env["ZOE_HOME"])
 
+        return self.feedback("Stopping agent %s" % name, sender)
+
     @Message(tags=["update"])
-    def update(self, name):
+    def update(self, name, sender=None):
         """ Update an installed agent. """
         alist = self.read_list()
 
         if not self.installed(name, alist):
-            print("Agent %s is not installed" % name)
-            return
+            msg = "Agent %s is not installed" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         self.clean()
 
@@ -360,22 +395,27 @@ class AgentManager:
         git_code = self.fetch(name, alist[name]["source"])
 
         if git_code != 0:
-            print("Could not fetch source")
+            msg = "Could not fetch source"
+            print(msg)
             self.clean()
-            return
+            return self.feedback(msg, sender)
 
-        # Parse version
-        info_path = path(temp, "zam", "info")
-        a_info = ConfigParser()
-        a_info.read_string(StringIO(
-            "[info]\n%s" % open(info_path).read()).read())
+        # Parse information
+        a_info = self.parse_info(path(temp, "zam", "info"));
 
-        remote_ver = Version(a_info["info"]["version"])
+        # Version is mandatory!
+        if not a_info["version"]:
+            msg = "Missing version in info file for %s" % name
+            print(msg)
+            return self.feedback(msg, sender)
+
+        remote_ver = Version(a_info["version"])
         local_ver = Version(alist[name]["version"])
 
         if remote_ver <= local_ver:
-            print("Agent %s is already up-to-date" % name)
-            return
+            msg = "Agent %s is already up-to-date" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         # PREUPDATE
         preupd = path(temp, "zam", "preupd")
@@ -395,10 +435,14 @@ class AgentManager:
                 dfile.write("%s\n" % f)
 
         # Make script executable
-        script = path(env["ZOE_HOME"], "agents",
-            name, a_info["info"]["script"])
-        st = os.stat(script)
-        os.chmod(script, st.st_mode | stat.S_IEXEC)
+        #
+        # There may be cases where an agent is only formed by natural
+        # language files, so this key may not be present.
+        if a_info["script"]:
+            script = path(env["ZOE_HOME"], "agents",
+                name, a_info["script"])
+            st = os.stat(script)
+            os.chmod(script, st.st_mode | stat.S_IEXEC)
 
         # Make cmdproc scripts executable
         for f in [cf for cf in file_list if cf.startswith("cmdproc")]:
@@ -410,13 +454,12 @@ class AgentManager:
         alist[name]["version"] = str(remote_ver)
         self.write_list(alist)
 
-        # Update topics
-        topics = []
-        if a_info["info"]["topics"]:
-            topics = a_info["info"]["topics"].split(" ")
+        # Update topics (if any)
+        if a_info["topics"]:
+            topics = a_info["topics"].split(" ")
+            zconf = self.topics_update(name, topics)
 
-        zconf = self.topics_update(name, topics)
-        self.write_conf(zconf)
+            self.write_conf(zconf)
 
         # POSTUPDATE
         postupd = path(temp, "zam", "postupd")
@@ -429,10 +472,15 @@ class AgentManager:
         # Cleanup
         self.clean()
 
-        # Restart the agent
-        self.restart(name)
 
-    def add_to_list(self, name, source, alist, ret=True):
+        if a_info["script"]:
+            # Restart the agent
+            return [
+                self.feedback("Updated agent %s" % name, sender),
+                self.restart(name, sender)
+            ]
+
+    def add_to_list(self, name, source, alist, ret=True, sender=None):
         """ Add an agent to the list.
 
             name -- name of the anget to install. Will be checked against
@@ -444,8 +492,9 @@ class AgentManager:
         new_alist = alist
 
         if name in new_alist.sections():
-            print("Agent %s is already in the list" % name)
-            return
+            msg = "Agent %s is already in the list" % name
+            print(msg)
+            return self.feedback(msg, sender)
 
         new_alist.add_section(name)
         new_alist[name]["source"] = str(source)
@@ -458,6 +507,26 @@ class AgentManager:
 
         if ret:
             return new_alist
+
+    def feedback(self, message, user):
+        """ If there is a sender, send feedback message with status
+            through Jabber.
+
+            message -- message to send
+            user -- user to send the message to
+        """
+        if not user:
+            return
+
+        to_send = {
+            "dst": "relay",
+            "tag": "relay",
+            "relayto": "jabber",
+            "to": user,
+            "msg": message
+        }
+
+        return zoe.MessageBuilder(to_send)
 
     def fetch(self, name, source):
         """ Download the source of the agent to var/zam/name. """
@@ -537,13 +606,41 @@ class AgentManager:
                 # Tree already exists?
                 pass
 
-            new_path = shutil.copy(src, dst)
-            new_path = new_path.replace(env["ZOE_HOME"], "")
-            new_path = self.remove_slash(new_path)
+            shutil.copy(src, dst)
+            # new_path = shutil.copy(src, dst)
+            # new_path = new_path.replace(env["ZOE_HOME"], "")
+            # new_path = self.remove_slash(new_path)
 
-            file_list.append(new_path)
+            file_list.append(stripped)
 
         return file_list
+
+    def parse_info(self, info_path):
+        """ When installing an agent, parse the information file and return
+            a dictionary with the information.
+
+            In the case the specific field is not present, give value None
+            and continue.
+        """
+        info = ConfigParser()
+        # Add a dummy section
+        info.read_string(StringIO(
+            "[info]\n%s" % open(info_path).read()).read())
+
+        data = {
+            "agent": None,
+            "version": None,
+            "license": None,
+            "maintainer": None,
+            "script": None,
+            "topics": None,
+            "description": None
+        }
+
+        for key in info["info"].keys():
+            data[key] = info["info"][key]
+
+        return data
 
     def read_conf(self):
         """ Read the Zoe configuration file located in etc/zoe.conf. """
@@ -569,7 +666,7 @@ class AgentManager:
         if path.startswith("/"):
             new_path = path[0].replace("/", "") + path[1:]
 
-        return new_path             
+        return new_path
 
     def running(self, name):
         """ Check if an agent is running. """
