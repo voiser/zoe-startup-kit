@@ -32,26 +32,28 @@ from zoe.deco import *
 class BroadcastAgent:
 
     @Message(tags = ["send"])
-    def send(self, msg, to, group = "broadcast"):
+    def send(self, msg, to, group = "broadcast", by = None):
         users = zoe.Users()
         if to:
-            return self.sendto(msg, to, users)
+            return self.sendto(msg, to, users, by)
         else:
-            return self.sendgrp(msg, group, users)
+            return self.sendgrp(msg, group, users, by)
 
-    def sendgrp(self, msg, grpname, users):
+    def sendgrp(self, msg, grpname, users, by):
         self.logger.info("Sending message " + msg + " to group " + grpname)
         return [self.sendto(msg, member, users) for member in users.membersof(grpname)]
 
-    def sendto(self, msg, user, users):
-        self.logger.info("Sending message " + msg + "to user" + user)
+    def sendto(self, msg, user, users, by):
+        self.logger.info("Sending message " + msg + " to user " + user)
         subject = users.subject(user)
         preferred = subject["preferred"]
-        if preferred == "jabber":
+        if not by:
+            by = preferred
+        if by == "jabber":
             return self.jabber(msg, user)
-        elif preferred == "mail":
+        elif by == "mail":
             return self.mail(msg, user)
-        elif preferred == "twitter":
+        elif by == "twitter":
             return self.tweet(msg, user)
 
     def jabber(self, msg, user):
