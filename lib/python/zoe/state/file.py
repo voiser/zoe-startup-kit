@@ -46,27 +46,31 @@ class Stuff:
         self._category = category
         self._ident = ident
         self._directory = os.environ['ZOE_HOME'] + "/var/state/stuff/" + category + "/" + sender
+        self._filename = self._directory +  "/" + self._ident
         try:
             os.makedirs(self._directory)
         except OSError as e:
             pass
         
     def write(self, text):
-        filename = self._directory +  "/" + self._ident
-        f = open(filename, "w")
+        f = open(self._filename, "w")
         f.write(text)
         f.close()
 
     def read(self):
-        filename = self._directory +  "/" + self._ident
-        f = open(filename, "rb")
+        f = open(self._filename, "rb")
         data = f.read()
         f.close()
         return data
+
+    def remove(self):
+        try:
+            os.remove(self._filename)
+        except OSError as e:
+            pass
     
     def text(self):
-        filename = self._directory +  "/" + self._ident
-        f = open(filename, "r")
+        f = open(self._filename, "r")
         data = f.read()
         f.close()
         return data
