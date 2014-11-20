@@ -29,6 +29,18 @@ import inspect
 import time
 import threading
 import traceback
+import sys
+
+DEBUG = False
+DUMMY = False
+
+for arg in sys.argv:
+    if arg == "--deco-dummy":
+        print("Dummy mode active")
+        DUMMY = True
+    if arg == "--deco-debug":
+        print("zoe.deco debug mode active")
+        DEBUG = True
 
 class DecoratedLogger:
 
@@ -60,15 +72,18 @@ class DecoratedListener:
         self._candidates = []
         self._timed = []
         self._topic = topic
+        self._listener = zoe.Listener(self, name = self._name)
+        
         for m in dir(agent):
             k = getattr(agent, m)
+            if DEBUG: print("Candidate:", m, "attrs:", k)
             if hasattr(k, "__zoe__tags__"):
                 self._candidates.append(k)
             if hasattr(k, "__zoe__anymessage__"):
                 self._candidates.append(k)
             if hasattr(k, "__zoe__timed__"):
                 self._timed.append(k)
-        #print("Candidates:", self._candidates)
+        if DEBUG: print("Candidates:", self._candidates)
 
         print("Launching timed methods")
         for k in self._timed:
@@ -76,7 +91,6 @@ class DecoratedListener:
             self._fetchThread.start()
         
         print("Launching agent", self._name)
-        self._listener = zoe.Listener(self, name = self._name)
         if self._listener._dyn:
             self._listener.start(self.register)
         else:
@@ -110,13 +124,19 @@ class DecoratedListener:
 
     def dispatch(self, tags, parser):
         chosen = []
+        if DEBUG:
+            print("Looking for a candidate", tags, parser)
+            print("Candidates:", self, self._candidates)
         for c in self._candidates:
+            if DEBUG: print("Trying", c)
             if hasattr(c, "__zoe__anymessage__"):
+                if DEBUG: print(c, "is anymessage -> valid")
                 chosen.append(c)
                 continue
             expected = c.__zoe__tags__
+            if DEBUG: print(c, "expects tags", expected)
             if self.match(tags, expected):
-                #print("    Valid candidate")
+                if DEBUG: print(c, "Valid candidate")
                 chosen.append(c)
         if len(chosen) == 0:
             print("No candidates found")
@@ -127,11 +147,11 @@ class DecoratedListener:
                 print(c, c.__zoe__tags__)
             return
         c = chosen[0]
-        print("Candidate found:", chosen[0])
+        if DEBUG: print("Candidate found:", chosen[0])
         self.docall(c, parser)
 
     def match(self, tags, expected):
-        #print("    Trying to match", tags, " with ", expected)
+        if DEBUG: print("    Trying to match", tags, " with ", expected)
         if tags == [] and expected == []:
             # default message
             return True
@@ -144,11 +164,11 @@ class DecoratedListener:
             return False
 
     def docall(self, method, parser):
-        print("Calling method", method, "with parameters", parser)
+        if DEBUG: print("Calling method", method, "with parameters", parser)
         args, varargs, keywords, defaults = inspect.getargspec(method)
         if defaults:
             defaults = dict(zip(reversed(args), reversed(defaults))) # taken from http://stackoverflow.com/questions/12627118/get-a-function-arguments-default-value
-        #print(defaults)
+        if DEBUG: print("defaults are:", defaults)
         if defaults is None:
             defaults = {}
         args = args[1:]
@@ -176,15 +196,18 @@ class DecoratedListener:
             for r in ret:
                 rep = str(r)
                 print(rep)
-                self._listener.sendbus(rep)
+                if DUMMY:
+                    print ("(not sent due to dummy mode)")
+                else:
+                    self._listener.sendbus(rep)
 
 class Message:
     def __init__(self, tags):
         self._tags = tags
-        #print("Message with tags", self._tags)
+        if DEBUG: print("Message with tags", self._tags)
 
     def __call__(self, f):
-        #print("Setting tags", self._tags, "to", f)
+        if DEBUG: print("Setting tags", self._tags, "to", f)
         setattr(f, "__zoe__tags__", self._tags)
         return f
 
