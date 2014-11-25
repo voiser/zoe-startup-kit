@@ -27,6 +27,7 @@ See the [gul-zoe repository at Github](https://github.com/guluc3m/gul-zoe) for m
 
 # How do I start
 
+- Clone the repository with git. DO NOT download a zip file.
 - Check the configuration files at etc/ folder.
 - Load the Zoe configuration:
 
