@@ -86,9 +86,10 @@ class JabberAgent (sleekxmpp.ClientXMPP):
         user = jid.user + "@" + jid.domain
         model = zoe.Users()
         subjects = model.subjects()
-        subjects2 = [subjects[s] for s in subjects if subjects[s]["jabber"] == user or subjects[s]["jabber-alias"] == user]
-        uid = subjects2[0]["uniqueid"]
-        return subjects[uid]
+        for s in subjects:
+            if "jabber" in subjects[s] and user in subjects[s]["jabber"].split(","):
+                uid = subjects[s]["uniqueid"]
+                return subjects[uid]
 
     def receive(self, parser):
         if "command-feedback" in parser.tags():
