@@ -100,7 +100,7 @@ sub get {
   print("--rs restart /the agent <string>\n");
   print("--s stop /the agent <string>\n");
   print("--u update /the agent <string>\n");
-  
+
   print("--a añade /el agente <string> desde <string>\n");
   print("--c limpia el directorio temp/temporal\n");
   print("--f olvida /el agente <string>\n");
