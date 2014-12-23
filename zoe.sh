@@ -140,6 +140,21 @@ function status() {
 }
 
 #
+# Launches a python shell with the zoe libs and their dependencies loaded
+#
+function launch_python_shell() {
+  TMP=/tmp/zoe_shell.py
+  echo "
+import zoe
+import os
+import sys
+import pprint
+" > $TMP
+  echo "Launching python3 interactive shell with path $PYTHONPATH"
+  PYTHONSTARTUP=$TMP python3
+}
+
+#
 # Magic starts here
 #   ./zoe.sh [start | stop]
 #
@@ -170,7 +185,10 @@ case "$1" in
   "restart-agent" )
     restart_agent "$2"
     ;;
+  "python" )
+    launch_python_shell
+    ;;
   * )
-    echo "usage: ./zoe.sh server|start|stop|status|restart|launch-agent <name>|stop-agent <name>|restart-agent <name>"
+    echo "usage: ./zoe.sh server | start | stop | status | restart | launch-agent <name> | stop-agent <name> | restart-agent <name> | python"
     ;;
 esac
