@@ -162,10 +162,11 @@ class MailAgent:
         for part in message.walk():
             if part.is_multipart(): continue;
             mime = part.get_content_type()
-            charset = part.get_content_charset()
             payload = part.get_payload(decode = True)
-            if charset:
-                payload = payload.decode(charset).encode("utf-8")
+            if mime[:5] == "text/":
+                charset = part.get_content_charset()
+                if charset:
+                    payload = payload.decode(charset).encode("utf-8")
             params.append("--" + mime)
             fname = self.savefile(payload)
             params.append(fname)
@@ -200,7 +201,7 @@ class MailAgent:
                     ret = line[8:]
                     rets.append(ret)
                     print("Sending back to the server", ret)
-        return ret
+        return rets
 
     def savefile(self, value):
         f = tempfile.NamedTemporaryFile(delete = False)
