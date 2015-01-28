@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env perl
 #
 # This file is part of Zoe Assistant - https://github.com/guluc3m/gul-zoe
 #
@@ -25,17 +24,34 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import mail
-import os
+use Getopt::Long qw(:config pass_through);
+use strict;
 
-smtp=os.environ['zoe_mail_smtp']
-smtpport=os.environ['zoe_mail_smtp_port']
-pop3=os.environ['zoe_mail_pop3']
-pop3port=os.environ['zoe_mail_pop3_port']
-user=os.environ['zoe_mail_user']
-password=os.environ['zoe_mail_password']
-dkim=os.environ['zoe_mail_enable_dkim']
+#
+# Parse args
+# We are interested only in the subject and the plain text file
+#
 
-agent = mail.MailAgent(smtp, smtpport, user, password, pop3, pop3port, dkim)
-agent.start()
+my $subject;
+my $plain;
 
+GetOptions("mail-subject=s" => \$subject,
+           "plain=s"        => \$plain);
+
+
+#
+# Read the plain text file into $document. 
+# Notice that:
+#  - The mail agent converts all plain text to utf-8
+#  - All \n are removed. 
+#
+
+local $/;
+open(FILE, "<:encoding(utf-8)", $plain);
+my $document = <FILE>; 
+close (FILE);
+$document =~ s/\n/ /g;
+
+#
+# Analyze email
+#

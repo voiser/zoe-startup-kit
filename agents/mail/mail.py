@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # This file is part of Zoe Assistant - https://github.com/guluc3m/gul-zoe
@@ -37,82 +38,186 @@ import tempfile
 import subprocess
 import os
 
-class MailFeedback:
-    def __init__(self, to, m):
-        self._to = to
-        self._m = m
+from zoe.deco import *
 
-    def feedback(self, msg):
-        self._m.text(msg)
-    
-    def send(self):
-        self._m.sendto(self._to)
+SMTP = os.environ['zoe_mail_smtp']
+SMTPPORT = os.environ['zoe_mail_smtp_port']
+POP3 = os.environ['zoe_mail_pop3']
+POP3PORT = os.environ['zoe_mail_pop3_port']
+USER = os.environ['zoe_mail_user']
+PASSWORD = os.environ['zoe_mail_password']
+DKIM = os.environ['zoe_mail_enable_dkim']
 
+@Agent("mail")
 class MailAgent:
-    def __init__(self, smtp, smtpport, user, password, pop3, pop3port, enable_dkim, interval = 5):
-        self._listener = zoe.Listener(self, name = "mail")
-        self._smtp = smtp
-        self._smtpport = smtpport
-        self._user = user
-        self._password = password
-        self._pop3 = pop3
-        self._pop3port = pop3port
-        self._interval = interval
-        self._enable_dkim = enable_dkim == "true"
+    
+    #
+    # Receiving mails
+    #
 
-    def start(self):
-        if (self._interval > 0):
-            self._fetchThread = threading.Thread (target = self.fetch)
-            self._fetchThread.start()
-        self._listener.start()
+    @Timed(60)
+    def fetch(self):
+        """
+        Fetches all the incoming email and starts its processing
+        """
+        try:
+            print("Fetching mail from", POP3)
+            conn = poplib.POP3_SSL(POP3, POP3PORT)
+            conn.user(USER)
+            conn.pass_(PASSWORD)
+            messages = conn.list()[1]
+            count = len(messages)
+            print("Fetched", count, "messages")
+            mails = []
+            for i in range(count):
+                message = conn.retr(i + 1)[1]
+                mails.append(message)
+            conn.quit()
+            print("Executing...")
+            rets = []
+            for mail in mails:
+                ret = self.receive_mail(mail)
+                if ret:
+                    rets.append(ret)
+            print("done!")
+            return rets
+        except Exception as e:
+            traceback.print_exc()
 
-    def stop(self):
-        self._listener.stop()
-
-    def receive(self, parser):
-        if "received" in parser.tags():
-            self.rcvmail(parser)
-        elif "command-feedback" in parser.tags():
-            self.feedback(parser)
-        else:
-            self.sendmail(parser)
-
-    def rcvmail(self, parser):
-        b64 = parser.get("body")
-        text = base64.standard_b64decode(b64.encode("utf-8")).decode("utf-8")
-        mail = email.message_from_string(text)
+    def receive_mail(self, mailcontents):
+        """
+        Starts the processing of an incoming email
+        mailcontents -- the email contents as a list of bytes
+        """
+        mailbytes = b'\n'.join(mailcontents) + b'\n'
+        mailobj = email.message_from_bytes(mailbytes)
+        if not self.valid_sender(mailobj):
+            print("Invalid sender")
+            return
+        dkim = self.check_dkim(mailcontents)
+        if not dkim:
+            print("Invalid DKIM")
+            return
+        print("Valid mail")
+        return self.mailproc(mailbytes)
+    
+    def valid_sender(self, mail):
+        """
+        Returns the Zoe user that corresponds to an email sender, or None if no user is found
+        mail -- The email obect as a Message object given by the email lib
+        """
         rcpt = mail["From"]
         sender = self.finduser(rcpt)
-        if not sender:
-            self._listener.log("mail", "debug", "Received a mail from an unknown address " + mail["from"])
-            return
-        mp = mail.is_multipart()
-        if not mp:
-            parts = [ mail ]
-        else:
-            parts = mail.get_payload()
-        for part in parts:
-            mime = part.get_content_type()
-            if not mime == "text/plain":
-                continue
-            text = part.get_payload()
-            s = text.find("\n\n")
-            command = text[:s].strip()
-            bigstring = text[s:].strip()
-    
+        return sender
+
+    def check_dkim(self, mailcontents):
+        """
+        Checks the DKIM signature, returning true if it is correct
+        """
+        if DKIM != "true":
+            return True
+        mailbytes = b'\r\n'.join(mailcontents) + b'\r\n'
+        fname = self.savefile(mailbytes)
+        command = "cat " + fname + " | opendkim-testmsg"
+        retcode = subprocess.call(command, shell=True)
+        return retcode == 0
+
     def finduser(self, address):
+        """
+        Finds the Zoe user with a given email address
+        """
         name, addr = email.utils.parseaddr(address)
         model = zoe.Users()
         subjects = model.subjects()
         for s in subjects:
             if "mail" in subjects[s] and subjects[s]["mail"] == addr:
                 return subjects[s]
+    #
+    # mailproc scripts
+    #
+
+    def quote(self, s):
+        return "'" + s.replace("'", "\\'") + "'"
+    
+    def parsemail(self, bs):
+        params = []
+        message = email.message_from_bytes(bs)
+        headers = ["subject",
+                   "delivered-to",
+                   "in-reply-to",
+                   "date",
+                   "message-id",
+                   "from",
+                   "to",
+                   "reply-to",
+                   "list-id",
+                   "sender"]
+    
+        for h in headers:
+            if h in message:
+                params.append("--mail-" + h)
+                params.append(self.quote(message[h]))
+   
+        plain = b""
+        for part in message.walk():
+            if part.is_multipart(): continue;
+            mime = part.get_content_type()
+            charset = part.get_content_charset()
+            payload = part.get_payload(decode = True)
+            if charset:
+                payload = payload.decode(charset).encode("utf-8")
+            params.append("--" + mime)
+            fname = self.savefile(payload)
+            params.append(fname)
+            if mime == "text/plain":
+                plain = plain + payload
+
+        if len(plain) > 0:
+            params.append("--plain")
+            fname = self.savefile(plain)
+            params.append(fname)
+            
+        return params
+    
+    def mailproc(self, mailbytes):
+        fname = self.savefile(mailbytes)
+        params = self.parsemail(mailbytes)
+        mailprocdir = os.environ["ZOE_HOME"] + "/mailproc"
+        procs = [mailprocdir + "/" + f for f in os.listdir(mailprocdir)]
+        procs = [p for p in procs if os.access(p, os.X_OK)]
+        rets = []
+        for proc in procs:
+            print("Executing proc", proc, "over file", fname)
+            cmd = [proc, "--original", fname]
+            cmd.extend(params)
+            cmdline = " ".join(cmd)
+            print(cmdline)
+            p = subprocess.Popen(cmdline, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            for line in p.stdout.readlines():
+                print("This proc returned:", line)
+                line = line.decode("utf-8")
+                if line[:8] == "message ":
+                    ret = line[8:]
+                    rets.append(ret)
+                    print("Sending back to the server", ret)
+        return ret
+
+    def savefile(self, value):
+        f = tempfile.NamedTemporaryFile(delete = False)
+        f.write(value)
+        f.close()
+        return f.name
+
+    #
+    # Sending emails
+    #
 
     def guess(self, rcpt):
         if "@" in rcpt:
             return rcpt
         return zoe.Users().subject(rcpt)["mail"]
 
+    @Message(tags = [])
     def sendmail(self, parser):
         recipient = self.guess(parser.get("to"))
         s = parser.get("subject")
@@ -121,8 +226,8 @@ class MailAgent:
         files = parser.list("file")
         atts = parser.list("att")
         htmls = parser.list("html")
-        self._listener.log("mail", "debug", "email to " + recipient + " requested", parser)
-        m = zoe.Mail(self._smtp, self._smtpport, self._user, self._password)
+        self.logger.debug("email to " + recipient + " requested")
+        m = zoe.Mail(SMTP, SMTPPORT, USER, PASSWORD)
         if s:
             m.subject(s)
         if txt:
@@ -148,8 +253,9 @@ class MailAgent:
                 h = a.plaintext() 
                 m.text(h)
         m.sendto(recipient) 
-        self._listener.log("mail", "info", "email sent to " + recipient, parser)
+        self.logger.info("email sent to " + recipient)
 
+    @Message(tags = ["command-feedback"])
     def feedback(self, parser):
         recipient = self.guess(parser.get("sender"))
         sender = self.finduser(recipient)
@@ -158,84 +264,9 @@ class MailAgent:
             return
         txt = parser.get("feedback-string")
         mid = parser.get("inreplyto")
-        m = zoe.Mail(self._smtp, self._smtpport, self._user, self._password)
+        m = zoe.Mail(SMTP, SMTPPORT, USER, PASSWORD)
         m.text(txt)
         m.inreplyto(mid)
         m.sendto(recipient)
-        self._listener.log("mail", "info", "email sent to " + recipient, parser)
-
-    def savefile(self, value):
-        f = tempfile.NamedTemporaryFile(delete = False)
-        f.write(value)
-        f.close()
-        return f.name
-   
-    def check_rcpt(self, mailcontents):
-        mailbytes = b'\n'.join(mailcontents) + b'\n'
-        mail = email.message_from_bytes(mailbytes)
-        rcpt = mail["From"]
-        sender = self.finduser(rcpt)
-        return sender
-
-    def check_dkim(self, mailcontents):
-        if not self._enable_dkim:
-            return True
-        mailbytes = b'\r\n'.join(mailcontents) + b'\r\n'
-        fname = self.savefile(mailbytes)
-        command = "cat " + fname + " | opendkim-testmsg"
-        retcode = subprocess.call(command, shell=True)
-        return retcode == 0
- 
-    def receive_mail(self, mailcontents):
-        sender = self.check_rcpt(mailcontents)
-        if not sender:
-            print("Invalid sender")
-            self._listener.log("mail", "debug", "Received a mail from an unknown address " + mail["from"])
-            return
-        dkim = self.check_dkim(mailcontents)
-        if not dkim:
-            print("Invalid DKIM")
-            self._listener.log("mail", "debug", "Received a mail with invalid DKIM signature")
-            return
-        print("Valid mail")
-        self.mailproc(mailcontents)
-
-    def mailproc(self, mailcontents):
-        mailbytes = b'\n'.join(mailcontents) + b'\n'
-        fname = self.savefile(mailbytes)
-        mailproc = os.environ["ZOE_HOME"] + "/mailproc"
-        procs = [mailproc + "/" + f for f in os.listdir(mailproc)]
-        procs = [p for p in procs if os.access(p, os.X_OK)]
-        for proc in procs:
-            print("Executing proc", proc, "over file", fname)
-            p = subprocess.Popen(proc + " " + fname, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            for line in p.stdout.readlines():
-                print("This proc returned:", line)
-                line = line.decode("utf-8")
-                if line[:8] == "message ":
-                    print("Sending back to the server", line[8:])
-                    self._listener.sendbus(line[8:])
-    
-    def fetch(self):
-        while True:
-            try:
-                print("Fetching mail from", self._pop3)
-                conn = poplib.POP3_SSL(self._pop3, self._pop3port)
-                conn.user(self._user)
-                conn.pass_(self._password)
-                messages = conn.list()[1]
-                count = len(messages)
-                print("Fetched", count, "messages")
-                mails = []
-                for i in range(count):
-                    message = conn.retr(i + 1)[1]
-                    mails.append(message)
-                conn.quit()
-                print("Executing...")
-                for mail in mails:
-                    self.receive_mail(mail)
-                print("done!")
-            except Exception as e:
-                traceback.print_exc()
-            time.sleep(60 * self._interval)
+        self.logger.info("email sent to " + recipient)
 
