@@ -24,13 +24,42 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+#
+# The original mail is saved to a temp file and given as:
+#    --original /tmp/...
+#
+# Mail headers are given as --mail-xxx, like:
+#    --mail-(header) (value)
+#
+# Not all headers are passed, but some common ones:
+#    --mail-subject
+#    --mail-delivered-to
+#    --mail-in-reply-to
+#    --mail-date
+#    --mail-message-id
+#    --mail-from
+#    --mail-to
+#    --mail-reply-to
+#    --mail-list-id
+#    --mail-sender
+#
+# The email body is composed of parts, which are saved to temp files
+# and passed as:
+#    --(mime-type) (file)
+#
+# Example:
+#    --text/plain /tmp/... --text/html /tmp/... --image/png /tmp/...
+#
+# All plain text parts are concatenated and stored in a single file:
+#    --plain /tmp/...
+#
+# so, if you are interested in the text and you don't care about the mail
+# structure or attachments, you can concentrate only in this parameter.
+#
+# All text parts are converted to UTF-8
+
 use Getopt::Long qw(:config pass_through);
 use strict;
-
-#
-# Parse args
-# We are interested only in the subject and the plain text file
-#
 
 my $subject;
 my $plain;
