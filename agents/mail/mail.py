@@ -78,7 +78,7 @@ class MailAgent:
             for mail in mails:
                 ret = self.receive_mail(mail)
                 if ret:
-                    rets.append(ret)
+                    rets.extend(ret)
             print("done!")
             return rets
         except Exception as e:
