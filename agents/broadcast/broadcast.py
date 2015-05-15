@@ -55,6 +55,8 @@ class BroadcastAgent:
             return self.mail(msg, user)
         elif by == "twitter":
             return self.tweet(msg, user)
+        elif by == "tg":
+            return self.tg(msg, user)
 
     def jabber(self, msg, user):
         self.logger.info("Jabber to " + user)
@@ -67,3 +69,8 @@ class BroadcastAgent:
     def tweet(self, msg, user):
         self.logger.info("Twit to " + user)
         return zoe.MessageBuilder({"dst":"twitter", "to":user, "msg":msg})
+
+    def tg(self, msg, user):
+        self.logger.info("Telegram to " + user)
+        return zoe.MessageBuilder({"dst":"tg", "to":user, "msg":msg})
+

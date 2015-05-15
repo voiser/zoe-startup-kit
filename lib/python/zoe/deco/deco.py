@@ -73,6 +73,7 @@ class DecoratedListener:
         self._timed = []
         self._topic = topic
         self._listener = zoe.Listener(self, name = self._name)
+        self._agent.sendbus = self._listener.sendbus
         
         for m in dir(agent):
             k = getattr(agent, m)
@@ -118,7 +119,8 @@ class DecoratedListener:
         self._listener.sendbus(m)
 
     def receive(self, parser):
-        print("Message received:", str(parser))
+        if DEBUG:
+            print("Message received:", str(parser))
         tags = parser.tags()
         self.dispatch(tags, parser)
 
