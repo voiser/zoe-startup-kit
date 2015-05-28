@@ -1,2 +1,4 @@
 agents/zam/zam.py
 cmdproc/zam.pl
+locale/en/LC_MESSAGES/zam.mo
+locale/es/LC_MESSAGES/zam.mo
