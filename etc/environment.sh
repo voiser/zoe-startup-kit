@@ -3,7 +3,11 @@
 export ZOE_SERVER_HOST=localhost
 export ZOE_SERVER_PORT=30000
 
-# Paramters for Google Talk
+# Preferred locale for Zoe
+# Consists of a two char code such as: en (English), es (Spanish), etc.
+export ZOE_LOCALE="es"
+
+# Parameters for Google Talk
 export zoe_jabber_host="talk.google.com"
 export zoe_jabber_port="5222"
 export zoe_jabber_user="..."
