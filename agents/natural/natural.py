@@ -52,14 +52,34 @@ class NaturalAgent:
     def show(self, title, thing):
         print(title, json.dumps(thing, sort_keys = True, indent = 4))
 
-    def reload(self, parser):
+    def reload_proc(self, proc, parser):
         fuzzy = zoe.Fuzzy()
+        shellcmd = [proc, "--get"]
+        self.fill(parser, shellcmd)
+        cmd = " ".join(shellcmd)
+        print("Will execute:", cmd)
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for line in p.stdout.readlines():
+            pattern = line.decode("utf-8")
+            print("  Got", pattern)
+            if pattern[0] == '/' and pattern[-1] == '/':
+                self._commands[pattern] = (proc, [])
+            else:
+                for p in fuzzy.patterns(pattern):
+                    proccommand = []
+                    procparams = []
+                    for word in p.split():
+                        if word[0:2] == "--":
+                            procparams.append(word)
+                        else:
+                            proccommand.append(word)
+                    self._commands[" ".join(proccommand)] = (proc, procparams)
+
+    def reload(self, parser):
         cmdproc = os.environ["ZOE_HOME"] + "/cmdproc"
         procs = [cmdproc + "/" + f for f in os.listdir(cmdproc)]
         procs = [p for p in procs if os.access(p, os.X_OK)]
-
         procs_to_reload = []
-
         for proc in procs:
             if not proc in self._modif:
                 self._modif[proc] = 0
@@ -67,30 +87,9 @@ class NaturalAgent:
             if stat > self._modif[proc]:
                 self._modif[proc] = stat
                 procs_to_reload.append(proc)
-
         print("I have to reload", procs_to_reload)
-
         for proc in procs_to_reload:
-            shellcmd = [proc, "--get"]
-            self.fill(parser, shellcmd)
-            cmd = " ".join(shellcmd)
-            print("Will execute:", cmd)
-            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            for line in p.stdout.readlines():
-                pattern = line.decode("utf-8")
-                print("  Got", pattern)
-                if pattern[0] == '/' and pattern[-1] == '/':
-                    self._commands[pattern] = (proc, [])
-                else:
-                    for p in fuzzy.patterns(pattern):
-                        proccommand = []
-                        procparams = []
-                        for word in p.split():
-                            if word[0:2] == "--":
-                                procparams.append(word)
-                            else:
-                                proccommand.append(word)
-                        self._commands[" ".join(proccommand)] = (proc, procparams)
+            self.reload_proc(proc, parser)
 
     def receive(self, parser):
         tags = parser.tags()
