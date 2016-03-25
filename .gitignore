@@ -29,3 +29,4 @@ logs/pids
 src/zoe-users.conf
 **/build
 *.sqlite3
+.pip-requirements-installed

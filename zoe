@@ -1,5 +1,17 @@
 #!/bin/bash
 
+function err() {
+    echo "--- Error ---"
+    echo $@
+    echo
+    exit 1
+}
+
+which java > /dev/null || err "Please install java 1.7 or later"
+which python3 > /dev/null || err "Please install python3"
+
+. etc/environment.sh
+
 export ZOE_HOME=$(pwd)
 export ZOE_LOGS=${ZOE_HOME}/logs
 export ZOE_VAR=${ZOE_HOME}/var
@@ -31,6 +43,13 @@ function launch_agent() {
     name="$1"
 
     pushd ${ZOE_HOME}/agents/$name > /dev/null 2>&1
+    if [[ -f "pip-requirements.txt" ]] && [[ ! -f ".pip-requirements-installed" ]]
+    then
+        echo "Installing pip requirements for $name"
+        mkdir -p lib
+        pip3 install -t lib -r pip-requirements.txt && touch .pip-requirements-installed && echo "Done!"
+    fi
+
     for script in *
     do
         if [[ -f "$script" ]] && [[ -x "$script" ]]
