@@ -31,6 +31,7 @@ import threading
 import telebot
 import time
 import zoe
+import subprocess
 from os import environ as env
 from os.path import join as path
 from telebot import util
@@ -45,6 +46,7 @@ class Tgbot:
 
     def __init__(self):
         self._starttime = time.time()
+        self._sleeptime = 10000
 
         # Non-threaded (better fro skipping exceptions)
         self.bot = telebot.TeleBot(TG_TOKEN, threaded=False)
@@ -63,10 +65,10 @@ class Tgbot:
             try:
                 # Continue polling even after an exception occurs
                 self.bot.polling(none_stop=True)
-                time.sleep(100)
+                time.sleep(self._sleeptime)
             except Exception as e:
                 print('[EXCEPTION]:', e)
-                time.sleep(100)
+                time.sleep(self._sleeptime)
                 pass
 
     def _tg_msg(self, messages):
@@ -159,13 +161,27 @@ class Tgbot:
             return
 
         msg = parser.get('msg')
+        if msg:
+            # API supports a maximum of 5000 characters per message
+            # This will divide the messages in chunks of 3000 characters
+            text_chunks = util.split_string(msg, 3000)
+            for chunk in text_chunks:
+                # self.bot.send_message(to, chunk, parse_mode='Markdown')
+                self.bot.send_message(to, chunk)
 
-        # API supports a maximum of 5000 characters per message
-        # This will divide the messages in chunks of 3000 characters
-        text_chunks = util.split_string(msg, 3000)
-        for chunk in text_chunks:
-            # self.bot.send_message(to, chunk, parse_mode='Markdown')
-            self.bot.send_message(to, chunk)
+        voice = parser.get("voice")
+        if voice:
+            f = "/tmp/" + parser.get('to') + ".wav"
+            subprocess.call(["pico2wave", "-l", "es-ES", "-w", f, voice])
+            v = open(f, 'rb')
+            self.bot.send_voice(to, v)
+            v.close()
+        
+        img = parser.get("img")
+        if img:
+            v = open(img, 'rb')
+            self.bot.send_photo(to, v)
+            v.close()
 
     def finduser(self, user_ids):
         """ Find a given user or group.
