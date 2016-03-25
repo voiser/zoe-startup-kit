@@ -16,7 +16,6 @@ export ZOE_HOME=$(pwd)
 export ZOE_LOGS=${ZOE_HOME}/logs
 export ZOE_VAR=${ZOE_HOME}/var
 export ZOE_DOMAIN=private
-export PYTHONPATH=${ZOE_HOME}/lib/python-dependencies:${ZOE_HOME}/lib/python:${PYTHONPATH}
 export PYTHONUNBUFFERED=1
 export PERL5LIB=${ZOE_HOME}/lib/perl:${PERL5LIB}
 
@@ -42,7 +41,11 @@ function launch_server() {
 function launch_agent() {
     name="$1"
 
-    pushd ${ZOE_HOME}/agents/$name > /dev/null 2>&1
+    AGENTDIR=${ZOE_HOME}/agents/$name
+    pushd $AGENTDIR > /dev/null 2>&1
+
+    export PYTHONPATH=${ZOE_HOME}/lib/python-dependencies:${ZOE_HOME}/lib/python:${AGENTDIR}/lib:${PYTHONPATH}
+
     if [[ -f "pip-requirements.txt" ]] && [[ ! -f ".pip-requirements-installed" ]]
     then
         echo "Installing pip requirements for $name"

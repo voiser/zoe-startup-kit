@@ -26,8 +26,6 @@
 # SOFTWARE.
 
 import sys
-sys.path.append('./lib')
-
 import base64
 import threading
 import telebot
