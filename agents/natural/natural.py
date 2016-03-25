@@ -40,6 +40,8 @@ class NaturalAgent:
 
     def __init__(self):
         self._listener = zoe.Listener(self, name = "natural")
+        self._modif = {}
+        self._commands = {}
 
     def start(self):
         self._listener.start()
@@ -55,8 +57,20 @@ class NaturalAgent:
         cmdproc = os.environ["ZOE_HOME"] + "/cmdproc"
         procs = [cmdproc + "/" + f for f in os.listdir(cmdproc)]
         procs = [p for p in procs if os.access(p, os.X_OK)]
-        self._commands = {}
+
+        procs_to_reload = []
+
         for proc in procs:
+            if not proc in self._modif:
+                self._modif[proc] = 0
+            stat = os.stat(proc).st_mtime
+            if stat > self._modif[proc]:
+                self._modif[proc] = stat
+                procs_to_reload.append(proc)
+
+        print("I have to reload", procs_to_reload)
+
+        for proc in procs_to_reload:
             shellcmd = [proc, "--get"]
             self.fill(parser, shellcmd)
             cmd = " ".join(shellcmd)
