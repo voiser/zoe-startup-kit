@@ -44,7 +44,7 @@ function launch_agent() {
     AGENTDIR=${ZOE_HOME}/agents/$name
     pushd $AGENTDIR > /dev/null 2>&1
 
-    export PYTHONPATH=${ZOE_HOME}/lib/python-dependencies:${ZOE_HOME}/lib/python:${AGENTDIR}/lib:${PYTHONPATH}
+    # export PYTHONPATH=${ZOE_HOME}/lib/python-dependencies:${ZOE_HOME}/lib/python:${AGENTDIR}/lib:${PYTHONPATH}
 
     if [[ -f "pip-requirements.txt" ]] && [[ ! -f ".pip-requirements-installed" ]]
     then
@@ -58,6 +58,7 @@ function launch_agent() {
         if [[ -f "$script" ]] && [[ -x "$script" ]]
         then
             echo "Launching agent $name ($script)..."
+            PYTHONPATH=${ZOE_HOME}/lib/python-dependencies:${ZOE_HOME}/lib/python:${AGENTDIR}/lib:${PYTHONPATH} \
             ./${script} > ${ZOE_LOGS}/$name.log 2>&1 &
             sleep 1
         fi
